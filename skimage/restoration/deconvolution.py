@@ -394,3 +394,124 @@ def richardson_lucy(image, psf, iterations=50, clip=True):
         im_deconv[im_deconv < -1] = -1
 
     return im_deconv
+
+def isodd(atuple):
+	for item in atuple:
+		if item % 2 == 0:
+			return False
+	return True
+
+def psf2otf(psf, shape = None):
+	if shape == None:
+		shape = psf.shape
+	assert(isodd(shape))
+	psf = np.roll(np.roll(psf, -int(np.floor(shape[0]/2)), axis = 0), -int(np.floor(shape[1]/2)), axis = 1)
+	otf = np.fft.fft2(psf)
+return otf
+
+def desubsample(image, times=1, axises=[0]):
+    tmp=image.copy()
+    for axis in axises:
+        tmp = tmp.repeat(times, axis, inplace=True)
+
+def repeat2d(image, times):
+    return image.repeat(times, 0).repeat(times, 1)
+
+def corelucy(Y, H, dampar22, wI, readout, subsample, idx, vec, num):
+    """
+    CORELUCY Accelerated Damped Lucy-Richarson Operator.
+    Calculates function that when used with the scaled projected array
+    produces the next iteration array that maximizes the likelihood that
+    the entire suite satisfies the Poisson statistics.
+    """
+    reBlurred = np.real(np.ifftn(H.dot(np.fftn(Y))))
+
+    # 1. Resampling if needed
+    if subsample != 1: # Bin reBlurred back to the sizeI for non-singleton dims
+        #1.Reshape so that the-to-binned dimension separates into two
+        #dimensions, with one of them consisting of elements of a single bin.
+        reBlurred = np.reshape(reBlurred, vec);
+
+        #2. Bin (==calculate mean) along the first of the-to-binned dimension,
+        #that dimension consists of the bin elements. Reshape to get rid off
+        for k in range(num) # new appeared singleton.
+            vec(k) = [];
+            reBlurred = reshape(mean(reBlurred,k),vec);
+
+    # 2. An Estimate for the next step
+    reBlurred = reBlurred + readout;
+    reBlurred(reBlurred == 0) = eps;
+    AnEstim = wI/reBlurred + eps;
+
+    # 3. Damping if needed
+    if DAMPAR22 == 0 # No Damping
+        ImRatio = AnEstim(idx{:});
+    else: # Damping of the image relative to DAMPAR22 = (N*sigma)^2
+        gm = 10;
+        g = (wI*np.log(AnEstim)+ reBlurred - wI)/DAMPAR22;
+        g = np.min(g,1);
+        G = (g**(gm-1))*(gm-(gm-1)*g);
+        ImRatio = 1 + G(idx{:}).*(AnEstim(idx{:}) - 1);
+
+    f = np.fftn(ImRatio);
+
+def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1):
+    """ Richardson-Lucy deconvolution.
+
+    Parameters
+    ----------
+    image : ndarray
+       Input degraded image (can be N dimensional).
+    psf : ndarray
+       The point spread function.
+    iterations : int
+       Number of iterations. This parameter plays the role of
+       regularisation.
+    """
+    if eps not in globals():
+      eps = 1e-9
+    # to continue restoration
+    sizeI = image.shape()
+    sizePSF = psf.shape()
+    numNSdim = [i for i, sz in enumerate(sizePSF) if sz > 4] # do not desubsample rgb axis
+
+    if isinstance(image, list) and len(image) == 4:
+        image, prev_image, prev_prev_image, internal = image
+    else:
+        prev_image = image
+        prev_prev_image = 0
+        internal = np.zeros(image.size*subsample**len(numNSdim),2)
+    internal[:,1] = 0
+    #~ internal = image.size*subsample^ #J{4}(prod(sizeI)*SUBSMPL^length(numNSdim),2) = 0;
+    if weight is None:
+        weight = np.ones(image.shape())
+
+    # 1. Prepare OTF
+    H = psf2otf(PSF, sizeI);
+
+    # 2. Prepare parameters for iterations
+    # Create indexes for image according to the sampling rate
+    #idx = [':'] * len(sizeI)
+    #sizePSF = np.array(psg.shape)
+    #numNSdim = sizePSF[sizePSF != 1];
+    #for k in numNSdim:
+    #  idx[k] = np.reshape()
+
+    wI = max(weight.*(readout + image), 0)
+    prev_image = repeat2d(prev_image, subsample)
+    scale = np.real(np.fft.ifftn(np.conj(H)*np.fft.fftn(repeat2d(weight))) + sqrt(eps))
+    del weight
+    dampar22 = np.square(damp_array)/2
+
+    # 3 L_R Iterations
+    lambd = 2 * numpy.sum(internal != 0)
+    for k in range(lambd, lambd + iterations):
+
+      # 3.a Make an image predictions for the next iteration
+      if k > 1:
+        #~ lambd = internal[:,0].T.dot(internal[:,1])  /  (internal[:,1].T.dot(internal[:,1])+eps)
+        lambd = np.linalg.solve((internal[:,1].T.dot(internal[:,1])+eps), internal[:,0].T.dot(internal[:,1]))
+        lambd = np.max(np.min(lambd, 1), 0) # stability enforcement saturation
+      Y = np.max(prev_image + lambd*(prev_image - prev_prev_image), 0) # plus positivity constraint
+      # 3.b  Make core for the LR estimation
+
