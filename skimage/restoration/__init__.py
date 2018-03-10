@@ -3,7 +3,7 @@
 
 """
 
-from .deconvolution import wiener, unsupervised_wiener, richardson_lucy
+from .deconvolution import wiener, unsupervised_wiener, richardson_lucy, richardson_lucy_matlab
 from .unwrap import unwrap_phase
 from ._denoise import (denoise_tv_chambolle, denoise_tv_bregman,
                        denoise_bilateral, denoise_wavelet, estimate_sigma)
@@ -15,6 +15,7 @@ from .inpaint import inpaint_biharmonic
 __all__ = ['wiener',
            'unsupervised_wiener',
            'richardson_lucy',
+           'richardson_lucy_matlab',
            'unwrap_phase',
            'denoise_tv_bregman',
            'denoise_tv_chambolle',
