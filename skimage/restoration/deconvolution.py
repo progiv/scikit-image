@@ -409,7 +409,7 @@ def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-
     produces the next iteration array that maximizes the likelihood that
     the entire suite satisfies the Poisson statistics.
     """
-    reBlurred = np.real(np.fft.ifftn(H.dot(np.fft.fftn(Y))))
+    reBlurred = np.real(np.fft.ifftn(H * np.fft.fftn(Y)))
 
     # 1. Resampling if needed
     if subsample != 1: # Bin reBlurred back to the sizeI for non-singleton dims
@@ -420,24 +420,23 @@ def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-
         #2. Bin (==calculate mean) along the first of the-to-binned dimension,
         #that dimension consists of the bin elements. Reshape to get rid off
         for k in num: # new appeared singleton.
-            #~ vec(k) = [];
-            vec.pop(k)
+            vec.pop(k) #~ vec(k) = [];
             reBlurred = reshape(mean(reBlurred,k),vec);
 
     # 2. An Estimate for the next step
-    reBlurred = reBlurred + readout;
-    #reBlurred(reBlurred == 0) = eps;
-    AnEstim = wI/reBlurred + eps;
+    reBlurred += readout;
+    reBlurred[reBlurred == 0] = eps;
+    AnEstim = np.divide(wI, reBlurred) + eps;
 
     # 3. Damping if needed
     if dampar22 == 0: # No Damping
         ImRatio = desubsample(AnEstim, subsample, numNSdim);
     else: # Damping of the image relative to dampar22 = (N*sigma)^2
         gm = 10;
-        g = (wI*np.log(AnEstim)+ reBlurred - wI)/dampar22;
-        g = np.min(g,1);
+        g = (wI * np.log(AnEstim)+ reBlurred - wI) / dampar22;
+        g = np.minimum(g,1);
         G = (g**(gm-1))*(gm-(gm-1)*g);
-        ImRatio = 1 + desubsample(G,subsample, numNSdim).dot(desubsample(AnEstim0, subsample, numNSdim) - 1);
+        ImRatio = 1 + desubsample(G,subsample, numNSdim) * (desubsample(AnEstim0, subsample, numNSdim) - 1);
 
     return np.fft.fftn(ImRatio);
 
@@ -481,9 +480,9 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
     else:
         H = psf
 
-    wI = np.maximum(weight.dot(readout + image), 0)
+    wI = np.maximum(weight * (readout + image), 0)
     prev_image = desubsample(prev_image, subsample, numNSdim)
-    scale = np.real(np.fft.ifftn(np.conj(H)*np.fft.fftn(desubsample(weight))) + np.sqrt(eps))
+    scale = np.real(np.fft.ifftn(np.conj(H)*np.fft.fftn(desubsample(weight)))) + np.sqrt(eps)
     del weight
 
     dampar22 = np.square(damp_array)/2
@@ -518,7 +517,7 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
 
         # 3.a Make an image predictions for the next iteration
         if k > 2:
-            lambd = (internal[:,0].T.dot(internal[:,1])) / (internal[:,1].T.dot(internal[:,1]) +eps)
+            lambd = (internal[:,0].T.dot(internal[:,1])) / (internal[:,1].T.dot(internal[:,1]) +eps) # (scalar division)
             lambd = max(min(lambd, 1), 0) # stability enforcement saturation
         Y = np.maximum(prev_image + lambd*(prev_image - prev_prev_image), 0) # plus positivity constraint
 
@@ -527,8 +526,9 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
 
         # 3.c Determine next iteration image and apply poitivity constraint
         prev_prev_image = prev_image
-        prev_image = np.maximum(np.divide(Y.dot(np.real(np.fft.ifftn(np.conj(H).dot(cc)))), scale), 0)
+        prev_image = np.maximum(Y * np.real(np.fft.ifftn(np.conj(H) * cc)) / scale, 0)
         del cc
         internal[:,1] = internal[:,0]
         internal[:,0] = (prev_image-Y).ravel()
+    del wI, H, scale, Y
     return prev_image
