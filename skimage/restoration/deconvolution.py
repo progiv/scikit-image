@@ -7,7 +7,7 @@ from __future__ import division
 
 import numpy as np
 import numpy.random as npr
-from scipy.signal import fftconvolve, convolve
+from scipy.signal import fftconvolve, convolve, convolve2d
 
 from . import uft
 
@@ -402,14 +402,16 @@ def desubsample(image, times=1, axises=None):
         image = image.repeat(times, axis)#, inplace=True)
     return image
 
-def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-9):
+def corelucy(Y, psf, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-9):
     """
     CORELUCY Accelerated Damped Lucy-Richarson Operator.
     Calculates function that when used with the scaled projected array
     produces the next iteration array that maximizes the likelihood that
     the entire suite satisfies the Poisson statistics.
     """
-    reBlurred = np.real(np.fft.ifftn(H * np.fft.fftn(Y)))
+    #reBlurred = np.real(np.fft.ifftn(H * np.fft.fftn(Y)))
+    reBlurred = np.real(convolve2d(Y, psf, 'same'))
+    print(np.max(reBlurred))
 
     # 1. Resampling if needed
     if subsample != 1: # Bin reBlurred back to the sizeI for non-singleton dims
@@ -426,7 +428,7 @@ def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-
     # 2. An Estimate for the next step
     reBlurred += readout;
     reBlurred[reBlurred == 0] = eps;
-    AnEstim = np.divide(wI, reBlurred) + eps;
+    AnEstim = wI / reBlurred + eps;
 
     # 3. Damping if needed
     if dampar22 == 0: # No Damping
@@ -440,7 +442,7 @@ def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-
 
     return np.fft.fftn(ImRatio);
 
-def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1):
+def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1, eps=1e-16):
     """ Richardson-Lucy deconvolution.
 
     Parameters
@@ -453,8 +455,8 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
        Number of iterations. This parameter plays the role of
        regularisation.
     """
-    if 'eps' not in globals():
-        eps = 1e-9
+    #if 'eps' not in globals():
+    #    eps = 1e-9
     # to continue restoration
     sizeI = image.shape
     sizePSF = psf.shape
@@ -482,7 +484,8 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
 
     wI = np.maximum(weight * (readout + image), 0)
     prev_image = desubsample(prev_image, subsample, numNSdim)
-    scale = np.real(np.fft.ifftn(np.conj(H)*np.fft.fftn(desubsample(weight)))) + np.sqrt(eps)
+    #scale = np.real(np.fft.ifftn(np.conj(H)*np.fft.fftn(desubsample(weight)))) + np.sqrt(eps)
+    scale = np.real(convolve2d(desubsample(weight), psf, 'same')) + np.sqrt(eps)
     del weight
 
     dampar22 = np.square(damp_array)/2
@@ -522,7 +525,7 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
         Y = np.maximum(prev_image + lambd*(prev_image - prev_prev_image), 0) # plus positivity constraint
 
         # 3.b Make core for the LR estimation
-        cc = corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps)
+        cc = corelucy(Y, psf, dampar22, wI, readout, subsample, numNSdim, vec, num, eps)
 
         # 3.c Determine next iteration image and apply poitivity constraint
         prev_prev_image = prev_image
