@@ -440,7 +440,7 @@ def corelucy(Y, H, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1e-
 
     return np.fft.fftn(ImRatio);
 
-def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1):
+def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1, eps=1e-9):
     """ Richardson-Lucy deconvolution.
 
     Parameters
@@ -453,8 +453,6 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
        Number of iterations. This parameter plays the role of
        regularisation.
     """
-    if 'eps' not in globals():
-        eps = 1e-9
     # to continue restoration
     sizeI = image.shape
     sizePSF = psf.shape
@@ -531,4 +529,6 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
         internal[:,1] = internal[:,0]
         internal[:,0] = (prev_image-Y).ravel()
     del wI, H, scale, Y
+    prev_image[prev_image<0] = 0
+    prev_image[prev_image>1] = 1
     return prev_image
