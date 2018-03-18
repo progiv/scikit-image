@@ -411,7 +411,6 @@ def corelucy(Y, psf, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1
     """
     #reBlurred = np.real(np.fft.ifftn(H * np.fft.fftn(Y)))
     reBlurred = np.real(convolve2d(Y, psf, 'same'))
-    print(np.max(reBlurred))
 
     # 1. Resampling if needed
     if subsample != 1: # Bin reBlurred back to the sizeI for non-singleton dims
@@ -440,9 +439,10 @@ def corelucy(Y, psf, dampar22, wI, readout, subsample, numNSdim, vec, num, eps=1
         G = (g**(gm-1))*(gm-(gm-1)*g);
         ImRatio = 1 + desubsample(G,subsample, numNSdim) * (desubsample(AnEstim0, subsample, numNSdim) - 1);
 
-    return np.fft.fftn(ImRatio);
+    #return np.fft.fftn(ImRatio);
+    return ImRatio
 
-def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1, eps=1e-16):
+def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None, readout=0, subsample=1, eps=1e-16, clip=True):
     """ Richardson-Lucy deconvolution.
 
     Parameters
@@ -467,7 +467,7 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
     if isinstance(image, list) and len(image) == 4:
         image, prev_image, prev_prev_image, internal = image
     else:
-        prev_image = image
+        prev_image = np.ones(image.shape)*.5#image
         prev_prev_image = 0
         internal = np.zeros((image.size*subsample**len(numNSdim),2))
     internal[:,1] = 0
@@ -529,9 +529,12 @@ def richardson_lucy_matlab(image, psf, iterations=50, damp_array=0, weight=None,
 
         # 3.c Determine next iteration image and apply poitivity constraint
         prev_prev_image = prev_image
-        prev_image = np.maximum(Y * np.real(np.fft.ifftn(np.conj(H) * cc)) / scale, 0)
+        prev_image = np.maximum(Y * np.real(convolve2d(cc, psf, 'same')) / scale, 0)
         del cc
         internal[:,1] = internal[:,0]
         internal[:,0] = (prev_image-Y).ravel()
     del wI, H, scale, Y
+    if clip:
+        prev_image[prev_image > 1] = 1
+        prev_image[prev_image < -1] = -1
     return prev_image
